@@ -24,7 +24,7 @@ As part of the BasisVectors Hackathon requirements, a presentation (PowerPoint/s
 
 The presentation should be concise (10-15 slides) but comprehensive, focusing on both the technical implementation and the business value of the solution.
 
-**[Link to Presentation](https://docs.google.com/presentation/d/...)** (Update with your actual presentation link)
+**[Link to Presentation](presentation.pdf)**
 
 ## 💡 Hackathon Challenge Highlights
 
