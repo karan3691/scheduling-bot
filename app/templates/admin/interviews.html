@@ -1,0 +1,56 @@
+{% extends "base.html" %}
+
+{% block title %}Interviews - Scheduling Bot{% endblock %}
+
+{% block content %}
+<div class="container">
+    <h1 class="mb-4">Interviews</h1>
+    
+    <div class="card">
+        <div class="card-body">
+            {% if interviews %}
+                <div class="table-responsive">
+                    <table class="table table-striped">
+                        <thead>
+                            <tr>
+                                <th>ID</th>
+                                <th>Candidate</th>
+                                <th>Recruiter</th>
+                                <th>Date</th>
+                                <th>Time</th>
+                                <th>Status</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for interview in interviews %}
+                                <tr>
+                                    <td>{{ interview.id }}</td>
+                                    <td>{{ interview.candidate.name }}</td>
+                                    <td>{{ interview.recruiter.name }}</td>
+                                    <td>{{ interview.start_time.strftime('%Y-%m-%d') }}</td>
+                                    <td>{{ interview.start_time.strftime('%H:%M') }} - {{ interview.end_time.strftime('%H:%M') }}</td>
+                                    <td>
+                                        {% if interview.status == 'scheduled' %}
+                                            <span class="badge bg-warning">Scheduled</span>
+                                        {% elif interview.status == 'completed' %}
+                                            <span class="badge bg-success">Completed</span>
+                                        {% elif interview.status == 'cancelled' %}
+                                            <span class="badge bg-danger">Cancelled</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        <a href="{{ url_for('admin.interview_details', interview_id=interview.id) }}" class="btn btn-sm btn-primary">View</a>
+                                    </td>
+                                </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            {% else %}
+                <p>No interviews scheduled yet. Interviews will appear here when candidates schedule them through the WhatsApp bot.</p>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %} 

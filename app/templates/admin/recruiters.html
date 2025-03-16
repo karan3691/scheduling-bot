@@ -1,0 +1,73 @@
+{% extends "base.html" %}
+
+{% block title %}Recruiters - Scheduling Bot{% endblock %}
+
+{% block content %}
+<div class="container">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h1>Recruiters</h1>
+        <a href="{{ url_for('admin.add_recruiter') }}" class="btn btn-primary">Add Recruiter</a>
+    </div>
+    
+    <div class="card">
+        <div class="card-body">
+            {% if recruiters %}
+                <div class="table-responsive">
+                    <table class="table table-striped">
+                        <thead>
+                            <tr>
+                                <th>ID</th>
+                                <th>Name</th>
+                                <th>Email</th>
+                                <th>Calendar ID</th>
+                                <th>Created</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for recruiter in recruiters %}
+                                <tr>
+                                    <td>{{ recruiter.id }}</td>
+                                    <td>{{ recruiter.name }}</td>
+                                    <td>{{ recruiter.email }}</td>
+                                    <td>{{ recruiter.calendar_id or 'Not set' }}</td>
+                                    <td>{{ recruiter.created_at.strftime('%Y-%m-%d %H:%M') }}</td>
+                                    <td>
+                                        <a href="{{ url_for('admin.edit_recruiter', recruiter_id=recruiter.id) }}" class="btn btn-sm btn-primary">Edit</a>
+                                        <button type="button" class="btn btn-sm btn-danger" data-bs-toggle="modal" data-bs-target="#deleteModal{{ recruiter.id }}">
+                                            Delete
+                                        </button>
+                                        
+                                        <!-- Delete Modal -->
+                                        <div class="modal fade" id="deleteModal{{ recruiter.id }}" tabindex="-1" aria-labelledby="deleteModalLabel{{ recruiter.id }}" aria-hidden="true">
+                                            <div class="modal-dialog">
+                                                <div class="modal-content">
+                                                    <div class="modal-header">
+                                                        <h5 class="modal-title" id="deleteModalLabel{{ recruiter.id }}">Confirm Delete</h5>
+                                                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                                                    </div>
+                                                    <div class="modal-body">
+                                                        Are you sure you want to delete recruiter <strong>{{ recruiter.name }}</strong>?
+                                                    </div>
+                                                    <div class="modal-footer">
+                                                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                                                        <form action="{{ url_for('admin.delete_recruiter', recruiter_id=recruiter.id) }}" method="post">
+                                                            <button type="submit" class="btn btn-danger">Delete</button>
+                                                        </form>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </td>
+                                </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            {% else %}
+                <p>No recruiters found. <a href="{{ url_for('admin.add_recruiter') }}">Add a recruiter</a> to get started.</p>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %} 

@@ -1,0 +1,80 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual Environment
+venv/
+ENV/
+env/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Logs
+logs/
+*.log
+
+# Database
+*.db
+*.sqlite3
+instance/
+
+# Sensitive files
+.env
+client-secret.json
+token.pickle
+calendar_watch.json
+*.pem
+*.key
+*.crt
+
+# OS specific
+.DS_Store
+Thumbs.db
+
+# Backup and temporary files
+*~
+*.bak
+*.tmp
+*.old
+app.py.old
+
+# Local development
+.coverage
+htmlcov/
+.pytest_cache/
+.tox/
+.nox/
+
+# Flask specific
+flask_session/
+
+# Ngrok
+.ngrok2/
+ngrok.yml
+
+# Deployment
+.vercel
+.netlify
+.serverless/

@@ -1,0 +1,58 @@
+{% extends "base.html" %}
+
+{% block title %}Candidates - Scheduling Bot{% endblock %}
+
+{% block content %}
+<div class="container">
+    <h1 class="mb-4">Candidates</h1>
+    
+    <div class="card">
+        <div class="card-body">
+            {% if candidates %}
+                <div class="table-responsive">
+                    <table class="table table-striped">
+                        <thead>
+                            <tr>
+                                <th>ID</th>
+                                <th>Name</th>
+                                <th>Phone Number</th>
+                                <th>Email</th>
+                                <th>Position Applied</th>
+                                <th>Status</th>
+                                <th>Created</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for candidate in candidates %}
+                                <tr>
+                                    <td>{{ candidate.id }}</td>
+                                    <td>{{ candidate.name }}</td>
+                                    <td>{{ candidate.phone_number }}</td>
+                                    <td>{{ candidate.email }}</td>
+                                    <td>{{ candidate.position_applied }}</td>
+                                    <td>
+                                        {% if candidate.status == 'pending' %}
+                                            <span class="badge bg-warning">Pending</span>
+                                        {% elif candidate.status == 'scheduled' %}
+                                            <span class="badge bg-success">Scheduled</span>
+                                        {% elif candidate.status == 'interviewed' %}
+                                            <span class="badge bg-info">Interviewed</span>
+                                        {% elif candidate.status == 'rejected' %}
+                                            <span class="badge bg-danger">Rejected</span>
+                                        {% elif candidate.status == 'hired' %}
+                                            <span class="badge bg-primary">Hired</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>{{ candidate.created_at.strftime('%Y-%m-%d %H:%M') }}</td>
+                                </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            {% else %}
+                <p>No candidates found. Candidates will appear here when they interact with the WhatsApp bot.</p>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %} 

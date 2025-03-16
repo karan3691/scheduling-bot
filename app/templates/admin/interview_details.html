@@ -1,0 +1,176 @@
+{% extends "base.html" %}
+
+{% block title %}Interview Details - Scheduling Bot{% endblock %}
+
+{% block content %}
+<div class="container">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h1>Interview Details</h1>
+        <a href="{{ url_for('admin.interviews') }}" class="btn btn-secondary">Back to Interviews</a>
+    </div>
+    
+    <div class="row">
+        <!-- Interview Details -->
+        <div class="col-md-6">
+            <div class="card mb-4">
+                <div class="card-header">
+                    <h5>Interview Information</h5>
+                </div>
+                <div class="card-body">
+                    <table class="table">
+                        <tr>
+                            <th>ID:</th>
+                            <td>{{ interview.id }}</td>
+                        </tr>
+                        <tr>
+                            <th>Date:</th>
+                            <td>{{ interview.start_time.strftime('%A, %B %d, %Y') }}</td>
+                        </tr>
+                        <tr>
+                            <th>Time:</th>
+                            <td>{{ interview.start_time.strftime('%I:%M %p') }} - {{ interview.end_time.strftime('%I:%M %p') }}</td>
+                        </tr>
+                        <tr>
+                            <th>Status:</th>
+                            <td>
+                                {% if interview.status == 'scheduled' %}
+                                    <span class="badge bg-warning">Scheduled</span>
+                                {% elif interview.status == 'completed' %}
+                                    <span class="badge bg-success">Completed</span>
+                                {% elif interview.status == 'cancelled' %}
+                                    <span class="badge bg-danger">Cancelled</span>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        <tr>
+                            <th>Calendar Event:</th>
+                            <td>
+                                {% if interview.calendar_event_id %}
+                                    <a href="https://calendar.google.com/calendar/event?eid={{ interview.calendar_event_id }}" target="_blank" class="btn btn-sm btn-primary">
+                                        View in Calendar
+                                    </a>
+                                {% else %}
+                                    <span class="text-muted">No calendar event</span>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        <tr>
+                            <th>Created:</th>
+                            <td>{{ interview.created_at.strftime('%Y-%m-%d %H:%M') }}</td>
+                        </tr>
+                    </table>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Candidate and Recruiter Details -->
+        <div class="col-md-6">
+            <div class="card mb-4">
+                <div class="card-header">
+                    <h5>Candidate Information</h5>
+                </div>
+                <div class="card-body">
+                    <table class="table">
+                        <tr>
+                            <th>Name:</th>
+                            <td>{{ interview.candidate.name }}</td>
+                        </tr>
+                        <tr>
+                            <th>Email:</th>
+                            <td>{{ interview.candidate.email }}</td>
+                        </tr>
+                        <tr>
+                            <th>Phone:</th>
+                            <td>{{ interview.candidate.phone_number }}</td>
+                        </tr>
+                        <tr>
+                            <th>Position:</th>
+                            <td>{{ interview.candidate.position_applied }}</td>
+                        </tr>
+                        <tr>
+                            <th>Status:</th>
+                            <td>
+                                {% if interview.candidate.status == 'pending' %}
+                                    <span class="badge bg-warning">Pending</span>
+                                {% elif interview.candidate.status == 'scheduled' %}
+                                    <span class="badge bg-success">Scheduled</span>
+                                {% elif interview.candidate.status == 'interviewed' %}
+                                    <span class="badge bg-info">Interviewed</span>
+                                {% elif interview.candidate.status == 'rejected' %}
+                                    <span class="badge bg-danger">Rejected</span>
+                                {% elif interview.candidate.status == 'hired' %}
+                                    <span class="badge bg-primary">Hired</span>
+                                {% endif %}
+                            </td>
+                        </tr>
+                    </table>
+                </div>
+            </div>
+            
+            <div class="card">
+                <div class="card-header">
+                    <h5>Recruiter Information</h5>
+                </div>
+                <div class="card-body">
+                    <table class="table">
+                        <tr>
+                            <th>Name:</th>
+                            <td>{{ interview.recruiter.name }}</td>
+                        </tr>
+                        <tr>
+                            <th>Email:</th>
+                            <td>{{ interview.recruiter.email }}</td>
+                        </tr>
+                        <tr>
+                            <th>Calendar ID:</th>
+                            <td>{{ interview.recruiter.calendar_id or 'Default' }}</td>
+                        </tr>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Actions -->
+    <div class="card mt-4">
+        <div class="card-header">
+            <h5>Actions</h5>
+        </div>
+        <div class="card-body">
+            <div class="row">
+                <div class="col-md-3">
+                    <form method="post" action="{{ url_for('admin.interview_details', interview_id=interview.id) }}">
+                        <input type="hidden" name="action" value="complete">
+                        <button type="submit" class="btn btn-success btn-block mb-2" {% if interview.status != 'scheduled' %}disabled{% endif %}>
+                            Mark as Completed
+                        </button>
+                    </form>
+                </div>
+                <div class="col-md-3">
+                    <form method="post" action="{{ url_for('admin.interview_details', interview_id=interview.id) }}">
+                        <input type="hidden" name="action" value="cancel">
+                        <button type="submit" class="btn btn-danger btn-block mb-2" {% if interview.status != 'scheduled' %}disabled{% endif %}>
+                            Cancel Interview
+                        </button>
+                    </form>
+                </div>
+                <div class="col-md-3">
+                    {% if not interview.calendar_event_id and interview.status == 'scheduled' %}
+                    <form method="post" action="{{ url_for('admin.interview_details', interview_id=interview.id) }}">
+                        <input type="hidden" name="action" value="create_calendar_event">
+                        <button type="submit" class="btn btn-primary btn-block mb-2">
+                            Create Calendar Event
+                        </button>
+                    </form>
+                    {% endif %}
+                </div>
+                <div class="col-md-3">
+                    <a href="mailto:{{ interview.candidate.email }}" class="btn btn-primary btn-block mb-2">
+                        Email Candidate
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %} 

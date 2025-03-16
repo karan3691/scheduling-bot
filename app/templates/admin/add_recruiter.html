@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+
+{% block title %}Add Recruiter - Scheduling Bot{% endblock %}
+
+{% block content %}
+<div class="container">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h1>Add Recruiter</h1>
+        <a href="{{ url_for('admin.recruiters') }}" class="btn btn-secondary">Back to Recruiters</a>
+    </div>
+    
+    <div class="card">
+        <div class="card-body">
+            <form method="post" action="{{ url_for('admin.add_recruiter') }}">
+                <div class="mb-3">
+                    <label for="name" class="form-label">Name</label>
+                    <input type="text" class="form-control" id="name" name="name" required>
+                </div>
+                <div class="mb-3">
+                    <label for="email" class="form-label">Email</label>
+                    <input type="email" class="form-control" id="email" name="email" required>
+                </div>
+                <div class="mb-3">
+                    <label for="calendar_id" class="form-label">Calendar ID (optional)</label>
+                    <input type="text" class="form-control" id="calendar_id" name="calendar_id">
+                    <div class="form-text">
+                        If left blank, the recruiter's primary calendar will be used. 
+                        You can find the Calendar ID in Google Calendar settings.
+                    </div>
+                </div>
+                <button type="submit" class="btn btn-primary">Add Recruiter</button>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %} 

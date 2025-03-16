@@ -1,0 +1,106 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard - Scheduling Bot{% endblock %}
+
+{% block content %}
+<div class="container">
+    <h1 class="mb-4">Dashboard</h1>
+    
+    <!-- Stats Cards -->
+    <div class="row mb-4">
+        <div class="col-md-4">
+            <div class="card text-white bg-primary">
+                <div class="card-body">
+                    <h5 class="card-title">Candidates</h5>
+                    <p class="card-text display-4">{{ candidate_count }}</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card text-white bg-success">
+                <div class="card-body">
+                    <h5 class="card-title">Recruiters</h5>
+                    <p class="card-text display-4">{{ recruiter_count }}</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card text-white bg-info">
+                <div class="card-body">
+                    <h5 class="card-title">Interviews</h5>
+                    <p class="card-text display-4">{{ interview_count }}</p>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Recent Interviews -->
+    <div class="card mb-4">
+        <div class="card-header">
+            <h5>Recent Interviews</h5>
+        </div>
+        <div class="card-body">
+            {% if recent_interviews %}
+                <div class="table-responsive">
+                    <table class="table table-striped">
+                        <thead>
+                            <tr>
+                                <th>Candidate</th>
+                                <th>Recruiter</th>
+                                <th>Date</th>
+                                <th>Time</th>
+                                <th>Status</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for interview in recent_interviews %}
+                                <tr>
+                                    <td>{{ interview.candidate.name }}</td>
+                                    <td>{{ interview.recruiter.name }}</td>
+                                    <td>{{ interview.start_time.strftime('%Y-%m-%d') }}</td>
+                                    <td>{{ interview.start_time.strftime('%H:%M') }} - {{ interview.end_time.strftime('%H:%M') }}</td>
+                                    <td>
+                                        {% if interview.status == 'scheduled' %}
+                                            <span class="badge bg-warning">Scheduled</span>
+                                        {% elif interview.status == 'completed' %}
+                                            <span class="badge bg-success">Completed</span>
+                                        {% elif interview.status == 'cancelled' %}
+                                            <span class="badge bg-danger">Cancelled</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        <a href="{{ url_for('admin.interview_details', interview_id=interview.id) }}" class="btn btn-sm btn-primary">View</a>
+                                    </td>
+                                </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            {% else %}
+                <p>No interviews scheduled yet.</p>
+            {% endif %}
+        </div>
+    </div>
+    
+    <!-- Quick Actions -->
+    <div class="card">
+        <div class="card-header">
+            <h5>Quick Actions</h5>
+        </div>
+        <div class="card-body">
+            <div class="row">
+                <div class="col-md-4">
+                    <a href="{{ url_for('admin.add_recruiter') }}" class="btn btn-primary btn-block mb-2">Add Recruiter</a>
+                </div>
+                <div class="col-md-4">
+                    <a href="{{ url_for('admin.candidates') }}" class="btn btn-success btn-block mb-2">View Candidates</a>
+                </div>
+                <div class="col-md-4">
+                    <a href="{{ url_for('admin.interviews') }}" class="btn btn-info btn-block mb-2">View All Interviews</a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %} 
