@@ -77,4 +77,4 @@ ngrok.yml
 # Deployment
 .vercel
 .netlify
-.serverless/
+.serverless/.env
