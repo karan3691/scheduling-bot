@@ -14,7 +14,6 @@ class Candidate(db.Model):
     
     # Relationship with interview slots
     availability_slots = db.relationship('AvailabilitySlot', backref='candidate', lazy=True)
-    interviews = db.relationship('Interview', backref='candidate', lazy=True)
     
     def __repr__(self):
         return f'<Candidate {self.name}>'
@@ -30,7 +29,6 @@ class Recruiter(db.Model):
     
     # Relationship with interview slots
     availability_slots = db.relationship('AvailabilitySlot', backref='recruiter', lazy=True)
-    interviews = db.relationship('Interview', backref='recruiter', lazy=True)
     
     def __repr__(self):
         return f'<Recruiter {self.name}>'
@@ -59,6 +57,7 @@ class Interview(db.Model):
     end_time = db.Column(db.DateTime, nullable=False)
     status = db.Column(db.String(50), default='scheduled')  # scheduled, completed, cancelled
     calendar_event_id = db.Column(db.String(200))
+    calendar_url = db.Column(db.String(500))  # Store the calendar URL
     
     # Foreign keys
     candidate_id = db.Column(db.Integer, db.ForeignKey('candidate.id'), nullable=False)
@@ -66,6 +65,10 @@ class Interview(db.Model):
     
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    # Define relationships
+    candidate = db.relationship('Candidate', backref=db.backref('interviews', lazy=True))
+    recruiter = db.relationship('Recruiter', backref=db.backref('interviews', lazy=True))
     
     def __repr__(self):
         return f'<Interview {self.start_time} - {self.end_time}>'
@@ -81,3 +84,7 @@ class ConversationState(db.Model):
     
     def __repr__(self):
         return f'<ConversationState {self.phone_number}: {self.current_state}>' 
+    
+
+
+

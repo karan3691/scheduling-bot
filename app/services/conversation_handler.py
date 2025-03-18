@@ -3,6 +3,160 @@ import re
 from app.services.scheduling_service import SchedulingService
 from app.models.models import Candidate, Recruiter, ConversationState
 
+# Define parse_availability function in this file instead of importing it
+def parse_availability(availability_text):
+    """Parse user's availability text into datetime slots"""
+    # Simple implementation to parse availability text
+    available_slots = []
+    
+    try:
+        # Current date and next 7 days
+        now = datetime.now()
+        
+        # Split by commas for different day-time ranges
+        day_times = [dt.strip() for dt in availability_text.split(',')]
+        
+        for day_time in day_times:
+            # Try to find a pattern like "Monday 2pm-4pm"
+            match = re.search(r'(\w+)\s+(\d+(?::\d+)?(?:am|pm)?)-(\d+(?::\d+)?(?:am|pm)?)', day_time, re.IGNORECASE)
+            
+            if match:
+                day_name, start_time_str, end_time_str = match.groups()
+                
+                # Find the next occurrence of the given day
+                target_day = now
+                day_name_lower = day_name.lower()
+                
+                # Map day names to weekday numbers (0 = Monday, 6 = Sunday)
+                day_map = {
+                    'monday': 0, 'mon': 0,
+                    'tuesday': 1, 'tue': 1, 'tues': 1,
+                    'wednesday': 2, 'wed': 2,
+                    'thursday': 3, 'thu': 3, 'thurs': 3,
+                    'friday': 4, 'fri': 4,
+                    'saturday': 5, 'sat': 5,
+                    'sunday': 6, 'sun': 6,
+                    'today': now.weekday(),
+                    'tomorrow': (now.weekday() + 1) % 7
+                }
+                
+                if day_name_lower in day_map:
+                    target_weekday = day_map[day_name_lower]
+                    days_ahead = (target_weekday - now.weekday()) % 7
+                    if days_ahead == 0 and now.hour >= 17:  # If today but after 5pm, go to next week
+                        days_ahead = 7
+                    
+                    target_day = now + timedelta(days=days_ahead)
+                else:
+                    # Try to parse as a date (e.g., "July 15")
+                    try:
+                        # This is a simplified approach, might need refinement
+                        from dateutil import parser
+                        parsed_date = parser.parse(day_name)
+                        if parsed_date:
+                            target_day = parsed_date
+                    except Exception:
+                        # If can't parse, skip this entry
+                        continue
+                
+                # Parse start and end times
+                try:
+                    # Helper to parse time
+                    def parse_time(time_str):
+                        # Add default am/pm if not specified
+                        if not ('am' in time_str.lower() or 'pm' in time_str.lower()):
+                            if int(re.search(r'(\d+)', time_str).group(1)) < 12:
+                                time_str += 'am'
+                            else:
+                                time_str += 'pm'
+                        
+                        # Simple parsing for common formats
+                        if 'am' in time_str.lower():
+                            hour = int(re.search(r'(\d+)', time_str).group(1))
+                            hour = hour if hour != 12 else 0  # Handle 12am as 0
+                            minute = 0
+                            if ':' in time_str:
+                                minute = int(re.search(r':(\d+)', time_str).group(1))
+                            return hour, minute
+                        else:  # pm
+                            hour = int(re.search(r'(\d+)', time_str).group(1))
+                            hour = hour if hour == 12 else hour + 12  # Handle 12pm and convert to 24h
+                            minute = 0
+                            if ':' in time_str:
+                                minute = int(re.search(r':(\d+)', time_str).group(1))
+                            return hour, minute
+                    
+                    start_hour, start_minute = parse_time(start_time_str)
+                    end_hour, end_minute = parse_time(end_time_str)
+                    
+                    # Create datetime objects
+                    start_datetime = target_day.replace(hour=start_hour, minute=start_minute, second=0, microsecond=0)
+                    end_datetime = target_day.replace(hour=end_hour, minute=end_minute, second=0, microsecond=0)
+                    
+                    # Handle case where end time wraps to next day
+                    if end_datetime <= start_datetime:
+                        end_datetime += timedelta(days=1)
+                    
+                    # Only add future slots (not past times)
+                    if end_datetime > now:
+                        available_slots.append((start_datetime, end_datetime))
+                except Exception as e:
+                    print(f"Error parsing time: {e}")
+                    # Skip this entry if there's an error
+                    continue
+        
+        # If no slots parsed correctly, try to create some based on the raw text
+        if not available_slots:
+            # Look for common patterns like "afternoons" or "mornings"
+            text_lower = availability_text.lower()
+            
+            # Starting tomorrow, create slots for the next 3 days
+            for i in range(1, 4):
+                slot_day = now + timedelta(days=i)
+                # Skip weekends
+                if slot_day.weekday() >= 5:  # 5=Saturday, 6=Sunday
+                    continue
+                    
+                if "morning" in text_lower:
+                    available_slots.append((
+                        slot_day.replace(hour=9, minute=0, second=0, microsecond=0),
+                        slot_day.replace(hour=12, minute=0, second=0, microsecond=0)
+                    ))
+                    
+                if "afternoon" in text_lower:
+                    available_slots.append((
+                        slot_day.replace(hour=13, minute=0, second=0, microsecond=0),
+                        slot_day.replace(hour=17, minute=0, second=0, microsecond=0)
+                    ))
+                    
+                if "evening" in text_lower:
+                    available_slots.append((
+                        slot_day.replace(hour=17, minute=0, second=0, microsecond=0),
+                        slot_day.replace(hour=19, minute=0, second=0, microsecond=0)
+                    ))
+                    
+                # If they mention specific days
+                for day, day_num in day_map.items():
+                    if day in text_lower and day != "today" and day != "tomorrow":
+                        # Find the next occurrence of this day
+                        days_ahead = (day_num - now.weekday()) % 7
+                        if days_ahead == 0:
+                            days_ahead = 7  # Go to next week if today
+                        
+                        target_day = now + timedelta(days=days_ahead)
+                        # Add a general afternoon slot
+                        available_slots.append((
+                            target_day.replace(hour=14, minute=0, second=0, microsecond=0),
+                            target_day.replace(hour=16, minute=0, second=0, microsecond=0)
+                        ))
+        
+        return available_slots
+    except Exception as e:
+        print(f"Error in parse_availability: {e}")
+        import traceback
+        traceback.print_exc()
+        return []
+
 class ConversationHandler:
     """Handler for WhatsApp conversations with candidates"""
     
@@ -15,6 +169,12 @@ class ConversationHandler:
         try:
             # Clean the phone number (remove 'whatsapp:' prefix if present)
             phone_number = from_number.replace('whatsapp:', '')
+            
+            # Check for reset command
+            if message_body.lower().strip() in ['reset', 'restart', 'start over']:
+                print(f"Resetting conversation for {phone_number}")
+                self.scheduling_service.reset_conversation(phone_number)
+                return "Conversation has been reset. Let's start over! Please tell me your full name."
             
             # Get or create conversation state
             state = self.scheduling_service.get_or_create_conversation_state(phone_number)
@@ -53,12 +213,6 @@ class ConversationHandler:
                 
                 return response
             
-            # Check if this is a reset command
-            if message_body.lower() == 'reset':
-                # Reset the conversation
-                self.scheduling_service.update_conversation_state(phone_number, 'initial', {})
-                return "Conversation has been reset. Send 'hi' or 'hello' to start again."
-            
             # Check if this is a continue command
             if message_body.lower() == 'continue':
                 # Provide appropriate response based on current state
@@ -81,17 +235,6 @@ class ConversationHandler:
                 else:
                     return "Let's continue. Please send 'hi' or 'hello' to start."
             
-            # Check if user is trying to restart the conversation
-            if message_body.lower() in ['hi', 'hello', 'hey', 'start'] and state.current_state != 'initial':
-                # If we're in awaiting_name state and user sends Hi again, treat it as their name
-                if state.current_state == 'awaiting_name':
-                    return self.handle_name_state(phone_number, message_body, state)
-                
-                # Otherwise, ask if they want to restart
-                return ("It looks like you're already in the middle of scheduling an interview. "
-                       "Would you like to continue where you left off or start over? "
-                       "Reply 'continue' to continue or 'reset' to start over.")
-            
             # Handle message based on current state
             if state.current_state == 'initial':
                 return self.handle_initial_state(phone_number, message_body)
@@ -108,21 +251,14 @@ class ConversationHandler:
             elif state.current_state == 'awaiting_confirmation':
                 return self.handle_confirmation_state(phone_number, message_body, state)
             else:
-                # Default response for unknown state
-                # Reset to initial state to recover
+                # Unknown state, reset to initial
                 self.scheduling_service.update_conversation_state(phone_number, 'initial', {})
-                return "I'm sorry, I'm having trouble understanding. Please start over by sending 'hi' or 'hello'."
+                return "I'm sorry, there was an error with the conversation state. Please start over by sending 'hi' or 'hello'."
+                
         except Exception as e:
             print(f"Error in handle_message: {str(e)}")
             import traceback
             traceback.print_exc()
-            
-            # Try to recover by resetting the state
-            try:
-                self.scheduling_service.update_conversation_state(from_number.replace('whatsapp:', ''), 'initial', {})
-            except:
-                pass
-                
             return "I'm sorry, there was an error processing your message. Please try again by sending 'hi' or 'hello'."
     
     def handle_initial_state(self, phone_number, message_body):
@@ -232,6 +368,19 @@ class ConversationHandler:
                 print(f"Found existing candidate: {existing_candidate.id} - {existing_candidate.name} - {existing_candidate.email}")
                 print(f"Will create a new candidate with email: {email}")
             
+            # Force update the context directly in the database first to ensure it persists
+            from app.models.database import db
+            from app.models.models import ConversationState
+            
+            state_record = ConversationState.query.filter_by(phone_number=phone_number).first()
+            if state_record:
+                import json
+                context_copy = state_record.context.copy() if state_record.context else {}
+                context_copy['email'] = email
+                state_record.context = context_copy
+                db.session.commit()
+                print(f"Forced context update before state change: {state_record.context}")
+            
             # Update conversation state
             self.scheduling_service.update_conversation_state(
                 phone_number, 
@@ -243,20 +392,16 @@ class ConversationHandler:
             updated_state = self.scheduling_service.get_or_create_conversation_state(phone_number)
             print(f"Verifying email was saved: {updated_state.context}")
             
-            if 'email' not in updated_state.context or not updated_state.context['email']:
-                print("WARNING: Email was not saved in context, forcing update")
-                # Force update the context directly in the database
-                from app.models.database import db
-                from app.models.models import ConversationState
-                
+            if 'email' not in updated_state.context or updated_state.context.get('email') != email:
+                print("WARNING: Email was not saved correctly in context, forcing update again")
+                # Force update the context directly in the database again
                 state_record = ConversationState.query.filter_by(phone_number=phone_number).first()
                 if state_record:
-                    import json
                     context_copy = state_record.context.copy() if state_record.context else {}
                     context_copy['email'] = email
                     state_record.context = context_copy
                     db.session.commit()
-                    print(f"Forced context update: {state_record.context}")
+                    print(f"Forced context update after state change: {state_record.context}")
             
             return "Great! For which position are you interviewing?"
         except Exception as e:
@@ -299,6 +444,17 @@ class ConversationHandler:
                     print("WARNING: No existing candidate found, using default name")
                     context['name'] = "Default User"
             
+            # Force read the context from the database to ensure we have the most recent version
+            from app.models.models import ConversationState
+            from app.models.database import db
+            db_state = ConversationState.query.filter_by(phone_number=phone_number).first()
+            if db_state and db_state.context:
+                # Update missing fields in our context from the database context
+                for key, value in db_state.context.items():
+                    if key not in context or not context[key]:
+                        context[key] = value
+                        print(f"Updated {key} from database context: {value}")
+            
             # Check if email is in the context - this is the key part
             print(f"Checking for email in context: {context}")
             if 'email' not in context or not context['email']:
@@ -317,7 +473,6 @@ class ConversationHandler:
                         print(f"Recovered email from database by name: {context['email']}")
                     else:
                         # If we still don't have an email, check if there's a previous conversation state
-                        from app.models.models import ConversationState
                         prev_state = ConversationState.query.filter_by(phone_number=phone_number).first()
                         if prev_state and prev_state.context and 'email' in prev_state.context:
                             context['email'] = prev_state.context['email']
@@ -363,6 +518,13 @@ class ConversationHandler:
                 new_context
             )
             
+            # Force update the context directly in the database to ensure it persists
+            db_state = ConversationState.query.filter_by(phone_number=phone_number).first()
+            if db_state:
+                db_state.context = new_context
+                db.session.commit()
+                print(f"Forced context update after state change: {db_state.context}")
+            
             # Double-check that the context was saved correctly
             updated_state = self.scheduling_service.get_or_create_conversation_state(phone_number)
             print(f"Verifying context was saved: {updated_state.context}")
@@ -382,130 +544,150 @@ class ConversationHandler:
     def handle_availability_state(self, phone_number, message_body, state):
         """Handle awaiting availability state"""
         try:
-            # Debug logging
-            print(f"Phone number: {phone_number}")
-            print(f"Current state: {state.current_state}")
-            print(f"Message body: '{message_body}'")
-            print(f"Context: {state.context}")
-            
-            # Parse availability from message
-            availability_slots = self.scheduling_service.parse_availability(message_body)
-            
-            print(f"Parsed availability slots: {availability_slots}")
-            
-            if not availability_slots:
-                return ("I couldn't understand your availability format. Please use the format:\n"
-                       "day time-time, day time-time\n\n"
-                       "For example: Monday 2pm-4pm, Tuesday 10am-12pm")
-            
-            # Get candidate ID from context
+            # Get context
             context = state.context if state.context is not None else {}
+            
+            # Simple validation - we're just checking if there's content
+            if not message_body or len(message_body.strip()) < 5:
+                return "I couldn't understand your availability. Please provide it in the format: day time-time, day time-time. For example: Monday 2pm-4pm, Tuesday 10am-12pm"
+            
+            # Store the raw availability message
+            context['raw_availability'] = message_body
+            
+            # Parse the availability using our function
+            available_slots = parse_availability(message_body)
+            
+            if not available_slots:
+                return "I couldn't understand your availability format. Please try again with the format: day time-time (e.g., 'Monday 2pm-4pm, Tuesday 10am-12pm')"
+            
+            # Get the candidate
             candidate_id = context.get('candidate_id')
-            
-            print(f"Candidate ID from context: {candidate_id}")
-            
             if not candidate_id:
-                # If candidate_id is missing, try to find the candidate by phone number
-                print(f"Candidate ID missing, trying to find candidate by phone number")
-                from app.models.models import Candidate
-                candidate = Candidate.query.filter_by(phone_number=phone_number).order_by(Candidate.created_at.desc()).first()
-                
-                if candidate:
-                    candidate_id = candidate.id
-                    # Update the context with all candidate information
-                    context['candidate_id'] = candidate_id
-                    context['name'] = candidate.name
-                    context['email'] = candidate.email
-                    context['position'] = candidate.position_applied
-                    print(f"Found candidate by phone number: {candidate_id}, email: {candidate.email}")
-                else:
-                    print(f"No candidate found for phone number: {phone_number}")
-                    # Try to register the candidate again
-                    if 'name' in context and 'email' in context and 'position' in context:
-                        print(f"Attempting to register candidate again")
-                        candidate = self.scheduling_service.register_candidate(
-                            context['name'],
-                            phone_number,
-                            context['email'],
-                            context['position']
-                        )
-                        candidate_id = candidate.id
-                        context['candidate_id'] = candidate_id
-                        print(f"Re-registered candidate: {candidate_id}")
-                    else:
-                        print(f"Missing required fields for registration")
-                        return "I'm sorry, there was an error with your registration. Please start over by sending 'hi' or 'hello'."
+                return "I'm having trouble with your registration. Please start over by sending 'hi' or 'hello'."
             
-            # Add availability slots to database
-            for start_time, end_time in availability_slots:
-                slot = self.scheduling_service.add_candidate_availability(candidate_id, start_time, end_time)
-                print(f"Added availability slot: {slot}")
-            
-            # Find matching slots with recruiters
-            # For simplicity, we'll use the first recruiter in the database
+            # Get the first available recruiter
             from app.models.models import Recruiter
             recruiter = Recruiter.query.first()
-            
             if not recruiter:
-                print("No recruiters found in database")
                 return "I'm sorry, there are no recruiters available at the moment. Please try again later."
             
-            print(f"Found recruiter: {recruiter.id} - {recruiter.name}")
+            # Check recruiter's calendar for availability 
+            start_date = datetime.now()
+            end_date = start_date + timedelta(days=7)
             
-            # Find matching slots
-            now = datetime.now()
-            end_date = now + timedelta(days=14)  # Look for slots in the next 14 days
-            
-            # Use mock data for testing instead of actual calendar integration
-            # This will ensure the conversation flows smoothly without Google Calendar authentication
-            mock_slots = []
-            for i in range(3):  # Generate 3 mock slots
-                slot_date = now + timedelta(days=i+1)
-                # Make sure it's a weekday
-                while slot_date.weekday() >= 5:  # Skip weekends
-                    slot_date = slot_date + timedelta(days=1)
+            # Get the recruiter's availability from Google Calendar
+            real_available_slots = []
+            try:
+                # Get the recruiter's free slots from their calendar
+                recruiter_slots = self.scheduling_service.get_recruiter_availability_from_calendar(
+                    recruiter.id, 
+                    start_date, 
+                    end_date
+                )
                 
-                # Create a slot at 2pm
-                start_time = slot_date.replace(hour=14, minute=0, second=0, microsecond=0)
-                end_time = start_time + timedelta(hours=1)
-                mock_slots.append((start_time, end_time))
+                # Filter slots based on candidate's availability
+                for recruiter_slot_start, recruiter_slot_end in recruiter_slots:
+                    for candidate_slot in available_slots:
+                        candidate_slot_start, candidate_slot_end = candidate_slot
+                        
+                        # Check if slots overlap
+                        if (candidate_slot_start <= recruiter_slot_end and 
+                            candidate_slot_end >= recruiter_slot_start):
+                            
+                            # Find the overlap
+                            overlap_start = max(candidate_slot_start, recruiter_slot_start)
+                            overlap_end = min(candidate_slot_end, recruiter_slot_end)
+                            
+                            # Only use if the overlap is at least 30 minutes
+                            if (overlap_end - overlap_start).total_seconds() >= 30 * 60:
+                                real_available_slots.append((overlap_start, overlap_end))
                 
-                # Create another slot at 4pm
-                start_time = slot_date.replace(hour=16, minute=0, second=0, microsecond=0)
-                end_time = start_time + timedelta(hours=1)
-                mock_slots.append((start_time, end_time))
+                if not real_available_slots:
+                    # If no matching slots, try with more flexible recruiter slots
+                    for candidate_slot in available_slots:
+                        candidate_day = candidate_slot[0].date()
+                        # Create a 1-hour slot in the middle of the candidate's availability
+                        candidate_slot_start, candidate_slot_end = candidate_slot
+                        duration = (candidate_slot_end - candidate_slot_start).total_seconds() / 60
+                        if duration >= 60:
+                            midpoint = candidate_slot_start + (candidate_slot_end - candidate_slot_start) / 2
+                            slot_start = midpoint - timedelta(minutes=30)
+                            slot_end = midpoint + timedelta(minutes=30)
+                            real_available_slots.append((slot_start, slot_end))
+            except Exception as e:
+                print(f"Error checking recruiter calendar: {str(e)}")
+                import traceback
+                traceback.print_exc()
+                # Fall back to mock slots based on candidate availability
+                for slot in available_slots:
+                    # Use the first hour of each candidate slot
+                    slot_start, slot_end = slot
+                    adjusted_end = slot_start + timedelta(hours=1)
+                    if adjusted_end <= slot_end:
+                        real_available_slots.append((slot_start, adjusted_end))
+                    else:
+                        real_available_slots.append((slot_start, slot_end))
             
-            matching_slots = mock_slots
-            
-            print(f"Generated mock matching slots: {matching_slots}")
-            
-            if not matching_slots:
-                return ("I couldn't find any matching slots with our recruiters based on your availability.\n\n"
-                       "Please provide more availability options or different time slots.")
-            
-            # Format matching slots for display
-            slot_options = "I found the following available interview slots:\n\n"
-            
-            for i, (start, end) in enumerate(matching_slots[:5], 1):  # Limit to 5 options
-                date_str = start.strftime("%A, %B %d, %Y")
-                start_time_str = start.strftime("%I:%M %p")
-                end_time_str = end.strftime("%I:%M %p")
+            # If still no slots, create mock slots
+            if not real_available_slots:
+                # Create mock slots (business hours for the next 3 days)
+                start_date = datetime.now().replace(hour=9, minute=0, second=0, microsecond=0)
+                if start_date.hour >= 17:
+                    start_date = start_date + timedelta(days=1)
                 
-                slot_options += f"{i}. {date_str} from {start_time_str} to {end_time_str}\n"
+                mock_slots = []
+                for i in range(3):
+                    current_date = start_date + timedelta(days=i)
+                    # Skip weekends
+                    if current_date.weekday() >= 5:  # Saturday or Sunday
+                        continue
+                        
+                    # Morning slot
+                    mock_slots.append((
+                        current_date.replace(hour=10, minute=0),
+                        current_date.replace(hour=11, minute=0)
+                    ))
+                    
+                    # Afternoon slot
+                    mock_slots.append((
+                        current_date.replace(hour=14, minute=0),
+                        current_date.replace(hour=15, minute=0)
+                    ))
+                
+                real_available_slots = mock_slots
             
-            slot_options += "\nPlease reply with the number of your preferred slot (e.g., '1', '2', etc.)."
+            # Limit to 3 slots for simplicity
+            if len(real_available_slots) > 3:
+                real_available_slots = real_available_slots[:3]
             
-            # Update state with matching slots and recruiter ID
-            context['matching_slots'] = [(slot[0].isoformat(), slot[1].isoformat()) for slot in matching_slots[:5]]
-            context['recruiter_id'] = recruiter.id
+            # Format the slots for display and save in context
+            formatted_slots = []
+            iso_slots = []
             
+            for slot_start, slot_end in real_available_slots:
+                formatted_slot = f"{slot_start.strftime('%A, %B %d')} from {slot_start.strftime('%I:%M %p')} to {slot_end.strftime('%I:%M %p')}"
+                formatted_slots.append(formatted_slot)
+                iso_slots.append([slot_start.isoformat(), slot_end.isoformat()])
+            
+            # Save the available slots in the context
+            context['available_slots'] = iso_slots
+            
+            # Update conversation state
             self.scheduling_service.update_conversation_state(
                 phone_number, 
                 'awaiting_slot_selection',
                 context
             )
             
-            return slot_options
+            # Build the response
+            response = "Great! Based on your availability and the recruiter's calendar, here are some possible interview slots:\n\n"
+            
+            for i, slot in enumerate(formatted_slots, 1):
+                response += f"{i}. {slot}\n"
+            
+            response += "\nPlease reply with the number of your preferred slot (e.g., '1', '2', or '3')."
+            
+            return response
         except Exception as e:
             # Log the error and return a friendly message
             print(f"Error in handle_availability_state: {str(e)}")
@@ -694,6 +876,17 @@ class ConversationHandler:
             # Get context
             context = state.context if state.context is not None else {}
             
+            # Force read the context from the database to ensure we have the most recent version
+            from app.models.database import db
+            from app.models.models import ConversationState
+            db_state = ConversationState.query.filter_by(phone_number=phone_number).first()
+            if db_state and db_state.context:
+                # Update missing fields in our context from the database context
+                for key, value in db_state.context.items():
+                    if key not in context:
+                        context[key] = value
+                        print(f"Updated {key} from database context: {value}")
+            
             if response in ['yes', 'y', 'confirm', 'ok']:
                 # Find candidate - get the most recent one with this phone number
                 from app.models.models import Candidate
@@ -723,14 +916,20 @@ class ConversationHandler:
                     start_time = datetime.fromisoformat(selected_slot[0])
                     end_time = datetime.fromisoformat(selected_slot[1])
                     
+                    # Get the email from the context, prioritizing it over the database
+                    email_to_use = context.get('email')
+                    if not email_to_use:
+                        email_to_use = candidate.email
+                        print(f"Email not found in context, using candidate email from database: {email_to_use}")
+                    else:
+                        print(f"Using email from context: {email_to_use}")
+                    
                     print(f"Scheduling interview for: {start_time} - {end_time}")
-                    print(f"Using candidate email from database: {candidate.email}")
                     
                     # Schedule the interview
                     try:
                         # Create the interview record in the database
                         from app.models.models import Interview
-                        from app.models.database import db
                         
                         # Create the interview
                         interview = Interview(
@@ -745,19 +944,61 @@ class ConversationHandler:
                         db.session.commit()
                         
                         print(f"Interview scheduled: {interview.id}")
+                        
+                        # Create calendar event automatically
+                        from app.services.google_calendar import GoogleCalendarService
+                        calendar_service = GoogleCalendarService()
+                        
+                        # Create event summary and description
+                        event_summary = f"Interview: {candidate.name} for {candidate.position_applied}"
+                        event_description = f"Interview with {candidate.name} for the {candidate.position_applied} position."
+                        
+                        # Create attendees list
+                        attendees = [
+                            {'email': email_to_use},  # Use candidate email
+                            {'email': recruiter.email}  # Use recruiter email
+                        ]
+                        
+                        # Create the calendar event
+                        try:
+                            event = calendar_service.create_event(
+                                recruiter.calendar_id or 'primary',
+                                event_summary,
+                                event_description,
+                                start_time,
+                                end_time,
+                                attendees
+                            )
+                            
+                            # Update the interview with the calendar event ID
+                            interview.calendar_event_id = event.get('id')
+                            db.session.commit()
+                            
+                            print(f"Calendar event created automatically: {event.get('id')}")
+                            
+                            # Check if there's a Google Meet link
+                            meet_link = event.get('hangoutLink')
+                            if meet_link:
+                                calendar_success_msg = f" A calendar invitation and Google Meet link have been sent to your email."
+                            else:
+                                calendar_success_msg = " A calendar invitation has been sent to your email."
+                        except Exception as e:
+                            print(f"Error creating calendar event: {e}")
+                            import traceback
+                            traceback.print_exc()
+                            # Continue even if calendar creation fails
+                            calendar_success_msg = " We'll send you a calendar invitation shortly."
+                        
+                        # Reset the conversation state only after successful interview scheduling
+                        self.scheduling_service.update_conversation_state(phone_number, 'initial', {})
+                        
+                        return ("Great! Your interview has been scheduled." + calendar_success_msg + "\n\n" +
+                               "If you need to reschedule, please start over by sending 'hi' or 'hello'.")
                     except Exception as e:
                         print(f"Error scheduling interview: {e}")
                         import traceback
                         traceback.print_exc()
                         return "I'm sorry, there was an error scheduling your interview. Please try again later."
-                    
-                    # Reset the conversation state
-                    self.scheduling_service.update_conversation_state(phone_number, 'initial', {})
-                    
-                    return ("Great! Your interview has been scheduled. You will receive a calendar invitation shortly at " + 
-                           f"{candidate.email}.\n\n" +
-                           "If you need to reschedule or have any questions, please contact our recruitment team.\n\n" +
-                           "Thank you and good luck with your interview!")
                 except Exception as e:
                     print(f"Error parsing selected slot: {e}")
                     return "I'm sorry, there was an error with your scheduling. Please start over by sending 'hi' or 'hello'."

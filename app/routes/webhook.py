@@ -1,4 +1,4 @@
-from flask import Blueprint, request, Response
+from flask import Blueprint, request, Response, jsonify
 from twilio.twiml.messaging_response import MessagingResponse
 from app.services.conversation_handler import ConversationHandler
 
@@ -10,18 +10,31 @@ conversation_handler = ConversationHandler()
 
 @webhook_bp.route('/webhook', methods=['POST'])
 def webhook():
-    """Handle incoming WhatsApp messages"""
+    """Handle incoming messages (both Twilio and JSON formats)"""
     try:
-        # Get incoming message details
-        from_number = request.values.get('From', '')
-        body = request.values.get('Body', '')
+        # Check if the request is JSON
+        if request.is_json:
+            data = request.get_json()
+            from_number = data.get('from', '')
+            body = data.get('message', '')
+        else:
+            # Handle Twilio format
+            from_number = request.values.get('From', '')
+            body = request.values.get('Body', '')
         
         print(f"Received message from {from_number}: '{body}'")
         
         # Handle the message
         response_text = conversation_handler.handle_message(from_number, body)
         
-        # Create Twilio response
+        # If it's a JSON request, return JSON response
+        if request.is_json:
+            return jsonify({
+                'response': response_text,
+                'from': from_number
+            })
+        
+        # Otherwise, return Twilio response
         resp = MessagingResponse()
         resp.message(response_text)
         
@@ -35,7 +48,14 @@ def webhook():
         traceback.print_exc()
         
         # Always send a response even if there's an error
-        resp = MessagingResponse()
-        resp.message("I'm sorry, there was an error processing your message. Please try again by sending 'hi' or 'hello'.")
+        error_message = "I'm sorry, there was an error processing your message. Please try again by sending 'hi' or 'hello'."
         
+        if request.is_json:
+            return jsonify({
+                'response': error_message,
+                'error': str(e)
+            })
+        
+        resp = MessagingResponse()
+        resp.message(error_message)
         return Response(str(resp), mimetype='text/xml') 

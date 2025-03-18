@@ -108,7 +108,17 @@ def interviews():
 @admin_bp.route('/interviews/<int:interview_id>', methods=['GET', 'POST'])
 def interview_details(interview_id):
     """View interview details"""
-    interview = Interview.query.get_or_404(interview_id)
+    interview = Interview.query.get(interview_id)
+    
+    # If interview doesn't exist, redirect to interviews page with a message
+    if not interview:
+        flash('Interview not found. It may have been deleted.', 'warning')
+        return redirect(url_for('admin.interviews'))
+    
+    # Set calendar URL if event ID exists
+    if interview.calendar_event_id:
+        interview.calendar_url = f"https://calendar.google.com/calendar/event?eid={interview.calendar_event_id}"
+        db.session.commit()
     
     if request.method == 'POST':
         action = request.form.get('action')
@@ -126,10 +136,13 @@ def interview_details(interview_id):
             if interview.calendar_event_id:
                 calendar_service = GoogleCalendarService()
                 try:
+                    # Use 'primary' as default calendar ID if not set
+                    calendar_id = interview.recruiter.calendar_id or 'primary'
                     calendar_service.delete_event(
-                        interview.recruiter.calendar_id,
+                        calendar_id,
                         interview.calendar_event_id
                     )
+                    flash('Interview and calendar event cancelled successfully', 'success')
                 except Exception as e:
                     flash(f'Error cancelling calendar event: {str(e)}', 'error')
             
@@ -146,8 +159,8 @@ def interview_details(interview_id):
                 
                 # Create attendees list
                 attendees = [
-                    {'email': interview.candidate.email},
-                    {'email': interview.recruiter.email}
+                    {'email': interview.candidate.email, 'responseStatus': 'needsAction'},
+                    {'email': interview.recruiter.email, 'responseStatus': 'accepted'}
                 ]
                 
                 # Create the calendar event
@@ -160,8 +173,9 @@ def interview_details(interview_id):
                     attendees
                 )
                 
-                # Update the interview with the calendar event ID
+                # Update the interview with the calendar event ID and URL
                 interview.calendar_event_id = event.get('id')
+                interview.calendar_url = f"https://calendar.google.com/calendar/event?eid={event.get('id')}"
                 db.session.commit()
                 
                 flash('Calendar event created successfully', 'success')

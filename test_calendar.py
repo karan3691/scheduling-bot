@@ -1,68 +1,84 @@
 import os
-from datetime import datetime, timedelta
-from dotenv import load_dotenv
+from app import create_app
 from app.services.google_calendar import GoogleCalendarService
+from app.models.models import Recruiter, Candidate
+from app.models.database import db
+from datetime import datetime, timedelta
 
-# Load environment variables
-load_dotenv()
-
-def test_calendar():
-    """Test Google Calendar integration"""
-    # Initialize Google Calendar service
-    calendar_service = GoogleCalendarService()
-    
-    try:
-        # Authenticate with Google Calendar
-        service = calendar_service.authenticate()
-        print("Authentication successful!")
-        
-        # Get calendar ID
-        calendar_id = input("Enter calendar ID (leave blank for primary calendar): ") or 'primary'
-        
-        # Get available slots for the next 7 days
-        now = datetime.now()
-        end_date = now + timedelta(days=7)
-        
-        print(f"\nFinding available slots from {now.strftime('%Y-%m-%d')} to {end_date.strftime('%Y-%m-%d')}...")
-        
-        available_slots = calendar_service.find_available_slots(
-            calendar_id,
-            now,
-            end_date,
-            duration_minutes=60,
-            working_hours=(9, 17)
-        )
-        
-        if available_slots:
-            print(f"\nFound {len(available_slots)} available slots:")
-            for i, (start, end) in enumerate(available_slots[:10], 1):  # Show first 10 slots
-                print(f"{i}. {start.strftime('%A, %B %d, %Y')} from {start.strftime('%I:%M %p')} to {end.strftime('%I:%M %p')}")
-            
-            # Ask if user wants to create a test event
-            create_event = input("\nDo you want to create a test event? (y/n): ").lower() == 'y'
-            
-            if create_event:
-                # Use the first available slot
-                start_time = available_slots[0][0]
-                end_time = available_slots[0][1]
-                
-                # Create a test event
-                event = calendar_service.create_event(
-                    calendar_id,
-                    "Test Event",
-                    "This is a test event created by the AI-Powered Scheduling Bot.",
-                    start_time,
-                    end_time,
-                    [{'email': input("Enter your email address: ")}]
-                )
-                
-                print(f"\nEvent created successfully! Event ID: {event.get('id')}")
-                print(f"Event link: {event.get('htmlLink')}")
+def test_calendar_service():
+    # Initialize the app context
+    app = create_app()
+    with app.app_context():
+        # Create test data in the database
+        recruiter_email = "recruiter@example.com"
+        recruiter = Recruiter.query.filter_by(email=recruiter_email).first()
+        if not recruiter:
+            recruiter = Recruiter(
+                name="Test Recruiter",
+                email=recruiter_email,
+                calendar_id="primary"  # Use "primary" for the default calendar
+            )
+            db.session.add(recruiter)
+            db.session.commit()
+            print(f"Created recruiter: {recruiter.name} with ID {recruiter.id}")
         else:
-            print("No available slots found in the specified time range.")
+            print(f"Using existing recruiter: {recruiter.name} with ID {recruiter.id}")
         
-    except Exception as e:
-        print(f"Error: {str(e)}")
+        # Initialize the Google Calendar service
+        calendar_service = GoogleCalendarService()
+        
+        # Create a test event
+        start_time = datetime.now() + timedelta(hours=1)
+        end_time = start_time + timedelta(hours=1)
+        
+        attendees = [
+            {'email': recruiter.email, 'responseStatus': 'accepted'},
+            {'email': 'test.candidate@example.com', 'responseStatus': 'needsAction'}
+        ]
+        
+        print("Creating test calendar event...")
+        
+        try:
+            event = calendar_service.create_event(
+                calendar_id="primary",
+                summary="Test Interview Event",
+                description="This is a test event to verify calendar notifications are working",
+                start_time=start_time,
+                end_time=end_time,
+                attendees=attendees
+            )
+            
+            print(f"Event created successfully!")
+            print(f"Event ID: {event.get('id')}")
+            print(f"HTML Link: {event.get('htmlLink')}")
+            
+            if 'attendees' in event:
+                print("Attendees:")
+                for attendee in event['attendees']:
+                    print(f"- {attendee.get('email')}: {attendee.get('responseStatus')}")
+            
+            # Get the event details to verify
+            retrieved_event = calendar_service.get_event("primary", event.get('id'))
+            print("\nVerifying event...")
+            
+            if retrieved_event:
+                print("Event was successfully retrieved")
+                print(f"Summary: {retrieved_event.get('summary')}")
+                print(f"Description: {retrieved_event.get('description')}")
+                
+                if 'hangoutLink' in retrieved_event:
+                    print(f"Meet Link: {retrieved_event.get('hangoutLink')}")
+                
+                return True
+            else:
+                print("Error: Could not retrieve the created event")
+                return False
+            
+        except Exception as e:
+            print(f"Error testing calendar service: {e}")
+            import traceback
+            traceback.print_exc()
+            return False
 
-if __name__ == '__main__':
-    test_calendar() 
+if __name__ == "__main__":
+    test_calendar_service() 

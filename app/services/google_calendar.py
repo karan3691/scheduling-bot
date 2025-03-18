@@ -8,7 +8,10 @@ from google.auth.transport.requests import Request
 from googleapiclient.discovery import build
 
 # Define the scopes
-SCOPES = ['https://www.googleapis.com/auth/calendar']
+SCOPES = [
+    'https://www.googleapis.com/auth/calendar',
+    'https://www.googleapis.com/auth/calendar.events'
+]
 
 class GoogleCalendarService:
     """Service for interacting with Google Calendar API"""
@@ -69,29 +72,109 @@ class GoogleCalendarService:
         """Create a calendar event"""
         service = self.get_calendar_service()
         
+        # Convert times to UTC if they're not already
+        if start_time.tzinfo is None:
+            start_time = start_time.replace(tzinfo=datetime.now().astimezone().tzinfo)
+        if end_time.tzinfo is None:
+            end_time = end_time.replace(tzinfo=datetime.now().astimezone().tzinfo)
+        
+        # Convert to UTC
+        start_time_utc = start_time.astimezone(datetime.now().astimezone().tzinfo.utc)
+        end_time_utc = end_time.astimezone(datetime.now().astimezone().tzinfo.utc)
+        
+        print(f"Creating calendar event:")
+        print(f"Calendar ID: {calendar_id}")
+        print(f"Summary: {summary}")
+        print(f"Start time: {start_time_utc}")
+        print(f"End time: {end_time_utc}")
+        print(f"Attendees: {attendees}")
+        
         event = {
             'summary': summary,
             'description': description,
             'start': {
-                'dateTime': start_time.isoformat(),
+                'dateTime': start_time_utc.isoformat(),
                 'timeZone': 'UTC',
             },
             'end': {
-                'dateTime': end_time.isoformat(),
+                'dateTime': end_time_utc.isoformat(),
                 'timeZone': 'UTC',
             },
             'attendees': attendees,
             'reminders': {
                 'useDefault': False,
                 'overrides': [
-                    {'method': 'email', 'minutes': 24 * 60},
-                    {'method': 'popup', 'minutes': 30},
+                    {'method': 'email', 'minutes': 24 * 60},  # 24 hours before
+                    {'method': 'popup', 'minutes': 30},  # 30 minutes before
                 ],
             },
+            'conferenceData': {
+                'createRequest': {
+                    'requestId': f"{start_time_utc.timestamp()}-{calendar_id}",
+                    'conferenceSolutionKey': {'type': 'hangoutsMeet'}
+                }
+            },
+            'guestsCanInviteOthers': False,
+            'guestsCanModify': False,
+            'guestsCanSeeOtherGuests': True
         }
         
-        event = service.events().insert(calendarId=calendar_id, body=event, sendUpdates='all').execute()
-        return event
+        try:
+            print("Inserting event into calendar...")
+            event = service.events().insert(
+                calendarId=calendar_id,
+                body=event,
+                sendUpdates='all',  # Ensure notifications are sent
+                conferenceDataVersion=1,
+                sendNotifications=True  # Explicitly enable notifications
+            ).execute()
+            
+            print(f"Event created successfully with ID: {event.get('id')}")
+            
+            # Add the Google Meet link to the event description
+            if 'hangoutLink' in event:
+                print(f"Adding Google Meet link: {event['hangoutLink']}")
+                event['description'] = f"{description}\n\nGoogle Meet Link: {event['hangoutLink']}"
+                event = service.events().update(
+                    calendarId=calendar_id,
+                    eventId=event['id'],
+                    body=event,
+                    sendUpdates='all',
+                    sendNotifications=True  # Explicitly enable notifications for update
+                ).execute()
+                print("Google Meet link added to event description")
+            
+            # Format the event ID for the calendar URL
+            event['id'] = event['id'].replace('@google.com', '')
+            
+            # Verify attendees
+            if 'attendees' in event:
+                print("Event attendees:")
+                for attendee in event['attendees']:
+                    print(f"- {attendee.get('email')}: {attendee.get('responseStatus')}")
+            
+            # Create a proper calendar URL
+            event['htmlLink'] = f"https://calendar.google.com/calendar/event?eid={event['id']}"
+            
+            # Send a reminder update to ensure notifications are sent
+            service.events().patch(
+                calendarId=calendar_id,
+                eventId=event['id'],
+                body={'reminders': {'useDefault': False, 'overrides': [
+                    {'method': 'email', 'minutes': 24 * 60},
+                    {'method': 'popup', 'minutes': 30}
+                ]}},
+                sendUpdates='all',
+                sendNotifications=True
+            ).execute()
+            print("Sent reminder notifications")
+            
+            return event
+        except Exception as e:
+            print(f"Error creating calendar event: {e}")
+            import traceback
+            traceback.print_exc()
+            raise
     
     def update_event(self, calendar_id, event_id, summary=None, description=None, start_time=None, end_time=None, attendees=None):
         """Update a calendar event"""
@@ -227,4 +310,19 @@ class GoogleCalendarService:
             # Move to the next day
             current_date = current_date + timedelta(days=1)
         
-        return available_slots 
+        return available_slots
+
+    def get_event(self, calendar_id, event_id):
+        """Get details of a specific event"""
+        service = self.get_calendar_service()
+        try:
+            event = service.events().get(
+                calendarId=calendar_id,
+                eventId=event_id
+            ).execute()
+            return event
+        except Exception as e:
+            print(f"Error getting event details: {e}")
+            import traceback
+            traceback.print_exc()
+            return None 

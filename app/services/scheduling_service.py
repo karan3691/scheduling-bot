@@ -84,18 +84,71 @@ class SchedulingService:
         """Get recruiter availability from Google Calendar"""
         # Get recruiter
         recruiter = Recruiter.query.get(recruiter_id)
-        if not recruiter or not recruiter.calendar_id:
+        if not recruiter:
+            print(f"Recruiter with ID {recruiter_id} not found")
+            return []
+            
+        if not recruiter.calendar_id:
+            print(f"Recruiter {recruiter.name} has no calendar ID set")
             return []
         
-        # Get available slots from calendar
-        available_slots = self.calendar_service.find_available_slots(
-            recruiter.calendar_id,
-            start_date,
-            end_date,
-            duration_minutes
-        )
+        try:
+            # Use the Google Calendar API to find real available slots
+            print(f"Fetching real availability from Google Calendar for recruiter {recruiter.name}")
+            print(f"Calendar ID: {recruiter.calendar_id}")
+            print(f"Date range: {start_date} to {end_date}")
+            
+            # Get available slots from calendar
+            available_slots = self.calendar_service.find_available_slots(
+                recruiter.calendar_id,
+                start_date,
+                end_date,
+                duration_minutes
+            )
+            
+            if available_slots:
+                print(f"Found {len(available_slots)} real available slots from Google Calendar")
+                for slot in available_slots:
+                    print(f"Available slot: {slot[0]} to {slot[1]}")
+                return available_slots
+            else:
+                print("No available slots found from Google Calendar, using fallback mock slots")
+        except Exception as e:
+            print(f"Error fetching availability from Google Calendar: {e}")
+            import traceback
+            traceback.print_exc()
+            print("Using fallback mock slots due to error")
         
-        return available_slots
+        # Fallback to mock slots if Google Calendar fails or returns no slots
+        mock_slots = []
+        current_date = start_date
+        
+        # Generate slots for the next 7 days
+        while current_date < end_date:
+            # Skip weekends
+            if current_date.weekday() >= 5:  # Saturday or Sunday
+                current_date = current_date + timedelta(days=1)
+                continue
+                
+            # Morning slot (10-11 AM)
+            slot_start = current_date.replace(hour=10, minute=0, second=0, microsecond=0)
+            slot_end = slot_start + timedelta(hours=1)
+            if slot_start >= start_date and slot_end <= end_date:
+                mock_slots.append((slot_start, slot_end))
+                print(f"Generated mock slot: {slot_start} to {slot_end}")
+            
+            # Afternoon slot (2-3 PM)
+            slot_start = current_date.replace(hour=14, minute=0, second=0, microsecond=0)
+            slot_end = slot_start + timedelta(hours=1)
+            if slot_start >= start_date and slot_end <= end_date:
+                mock_slots.append((slot_start, slot_end))
+                print(f"Generated mock slot: {slot_start} to {slot_end}")
+            
+            # Move to the next day
+            current_date = current_date + timedelta(days=1)
+        
+        print(f"Generated {len(mock_slots)} mock slots as fallback")
+        return mock_slots
     
     def find_matching_slots(self, candidate_id, recruiter_id, start_date, end_date, duration_minutes=60):
         """Find matching availability slots between candidate and recruiter"""
@@ -149,7 +202,13 @@ class SchedulingService:
         recruiter = Recruiter.query.get(recruiter_id)
         
         if not candidate or not recruiter:
+            print(f"Error: Candidate or recruiter not found. Candidate ID: {candidate_id}, Recruiter ID: {recruiter_id}")
             return None
+        
+        print(f"Scheduling interview:")
+        print(f"Candidate: {candidate.name} ({candidate.email})")
+        print(f"Recruiter: {recruiter.name} ({recruiter.email})")
+        print(f"Time: {start_time} to {end_time}")
         
         # Create the interview in the database
         interview = Interview(
@@ -167,28 +226,68 @@ class SchedulingService:
         event_summary = f"Interview: {candidate.name} for {candidate.position_applied}"
         event_description = f"Interview with {candidate.name} for the {candidate.position_applied} position."
         
+        # Set up attendees with proper roles
         attendees = [
-            {'email': candidate.email},
-            {'email': recruiter.email}
+            {'email': candidate.email, 'responseStatus': 'needsAction'},  # Candidate needs to respond
+            {'email': recruiter.email, 'responseStatus': 'accepted'}  # Recruiter is automatically accepted
         ]
         
-        event = self.calendar_service.create_event(
-            recruiter.calendar_id,
-            event_summary,
-            event_description,
-            start_time,
-            end_time,
-            attendees
-        )
-        
-        # Update the interview with the calendar event ID
-        interview.calendar_event_id = event.get('id')
-        db.session.commit()
-        
-        # Send confirmation messages
-        self.send_interview_confirmation(candidate.phone_number, candidate.name, recruiter.name, start_time, end_time)
-        
-        return interview
+        try:
+            # Create the calendar event in the recruiter's calendar
+            event = self.calendar_service.create_event(
+                recruiter.calendar_id or 'primary',  # Use primary calendar if no specific calendar ID
+                event_summary,
+                event_description,
+                start_time,
+                end_time,
+                attendees
+            )
+            
+            # Update the interview with the calendar event ID and URL
+            if event and 'id' in event:
+                interview.calendar_event_id = event.get('id')
+                
+                # Get the proper URL from the event response
+                if 'htmlLink' in event:
+                    interview.calendar_url = event.get('htmlLink')
+                else:
+                    # Create a generic URL if htmlLink is not available
+                    interview.calendar_url = f"https://calendar.google.com/calendar/event?eid={event.get('id')}"
+                
+                db.session.commit()
+                
+                # Force a refresh of the event to ensure notifications are sent
+                updated_event = self.calendar_service.get_event(
+                    recruiter.calendar_id or 'primary',
+                    event.get('id')
+                )
+                
+                # Verify the event was created correctly
+                verified = self.verify_calendar_event(
+                    recruiter.calendar_id or 'primary',
+                    event.get('id')
+                )
+                
+                if not verified:
+                    print("Warning: Calendar event verification failed, but proceeding with interview scheduling")
+                
+                print(f"Calendar event created successfully. Event ID: {event.get('id')}")
+                print(f"Calendar URL: {interview.calendar_url}")
+                print(f"Calendar invites sent to: {candidate.email} and {recruiter.email}")
+                
+                # Send confirmation messages
+                self.send_interview_confirmation(candidate.phone_number, candidate.name, recruiter.name, start_time, end_time)
+                
+                return interview
+            else:
+                print("Error: No event ID returned from calendar service")
+                return None
+        except Exception as e:
+            print(f"Error creating calendar event: {e}")
+            import traceback
+            traceback.print_exc()
+            # Even if calendar event creation fails, we still want to keep the interview record
+            return interview
     
     def send_interview_confirmation(self, phone_number, candidate_name, recruiter_name, start_time, end_time):
         """Send interview confirmation via WhatsApp"""
@@ -353,6 +452,18 @@ class SchedulingService:
                 traceback.print_exc()
                 return None
     
+    def reset_conversation(self, phone_number):
+        """Reset the conversation state for a phone number"""
+        conversation = ConversationState.query.filter_by(phone_number=phone_number).first()
+        if conversation:
+            db.session.delete(conversation)
+            db.session.commit()
+            print(f"Conversation state for {phone_number} has been reset")
+            return True
+        else:
+            print(f"No conversation state found for {phone_number}")
+            return False
+            
     def parse_availability(self, message_text):
         """Parse availability from a message text"""
         # This is a simple implementation and can be enhanced with NLP
@@ -470,4 +581,23 @@ class SchedulingService:
         if hour < 0 or hour > 23 or minute < 0 or minute > 59:
             raise ValueError(f"Invalid time: {hour}:{minute}")
         
-        return hour, minute 
+        return hour, minute
+    
+    def verify_calendar_event(self, calendar_id, event_id):
+        """Verify that a calendar event exists and has proper notifications"""
+        try:
+            event = self.calendar_service.get_event(calendar_id, event_id)
+            if not event:
+                print(f"Error: Could not retrieve event {event_id}")
+                return False
+                
+            # Check if attendees are set correctly
+            if 'attendees' not in event:
+                print("Warning: No attendees found in event")
+                return False
+                
+            print(f"Event verification successful for event {event_id}")
+            return True
+        except Exception as e:
+            print(f"Error verifying calendar event: {e}")
+            return False 

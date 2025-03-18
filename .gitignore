@@ -39,15 +39,26 @@ logs/
 *.db
 *.sqlite3
 instance/
+scheduling_bot.db
 
 # Sensitive files
 .env
+.env.*
+!.env.example
 client-secret.json
 token.pickle
 calendar_watch.json
 *.pem
 *.key
 *.crt
+*_secret*.*
+*_token*.*
+*_credentials*.*
+
+# Testing and debug files
+check_*.py
+test_*.py
+reset_*.py
 
 # OS specific
 .DS_Store
@@ -77,4 +88,12 @@ ngrok.yml
 # Deployment
 .vercel
 .netlify
-.serverless/.env
+.serverless
+.env
+
+# Additional sensitive files
+*credentials*.*
+*password*.*
+*api_key*.*
+*secret*.*
+*token*.*

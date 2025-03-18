@@ -4,6 +4,40 @@
 
 ![Scheduling Bot Logo](https://via.placeholder.com/150?text=SchedulingBot)
 
+## 🔄 Recent Updates & Fixes
+
+We've made several important improvements to the bot:
+
+1. **Improved Error Handling**: 
+   - Fixed template not found errors in admin views
+   - Proper error messages when accessing non-existent resources
+   - Graceful handling of calendar API errors
+
+2. **Enhanced Conversation Flow**:
+   - Added "reset" command to restart conversations at any point
+   - Improved natural language understanding for availability inputs
+   - Better error recovery in the conversation flow
+
+3. **Admin Dashboard Improvements**:
+   - Redesigned interview details page with clear sections for interview, candidate, and recruiter information
+   - Better spacing and organization of action buttons
+   - Fixed calendar event cancellation functionality
+
+4. **Database Stability**:
+   - Fixed database initialization to preserve existing data
+   - Improved schema to properly track calendar events
+   - Better handling of database connections
+
+5. **Calendar Integration**:
+   - Fixed email notification issues for recruiters
+   - Added proper scopes for Google Calendar API
+   - Improved handling of calendar event creation and deletion
+
+6. **User Experience**:
+   - Cleaner interview confirmation messages
+   - More intuitive error messages
+   - Better guidance throughout the scheduling process
+
 ## 🏆 Hackathon Challenge Solution
 
 This project was developed for the BasisVectors Hackathon, addressing the challenge of streamlining the interview scheduling process. Our solution automates the entire workflow from initial candidate contact to calendar invitation, saving recruiters countless hours and improving candidate experience.
@@ -395,6 +429,8 @@ The application follows a service-oriented architecture with clear separation of
 2. **Multi-language Support**: Add support for multiple languages
 3. **SMS Fallback**: Add SMS support for users without WhatsApp
 4. **Customizable Templates**: Allow recruiters to customize message templates
+5. **Reminder Notifications**: Send reminders before scheduled interviews
+6. **Bulk Interview Scheduling**: Support for scheduling multiple interviews at once
 
 ### Long-term Vision
 1. **AI-powered Scheduling Optimization**: Use machine learning to optimize interview scheduling
@@ -402,6 +438,7 @@ The application follows a service-oriented architecture with clear separation of
 3. **Candidate Feedback Collection**: Collect feedback after interviews
 4. **Analytics Dashboard**: Provide insights on scheduling patterns and efficiency
 5. **Mobile App**: Develop a mobile app for recruiters
+6. **Multiple Timezone Support**: Better handling of different timezones
 
 ## 🧩 Challenges & Solutions
 
@@ -420,6 +457,14 @@ The application follows a service-oriented architecture with clear separation of
 ### Challenge 4: Multiple Users with Same Phone
 **Problem**: Multiple candidates using the same phone number caused data conflicts.
 **Solution**: Modified the database schema and conversation handling to support multiple candidates with the same phone number.
+
+### Challenge 5: Calendar Event Email Notifications
+**Problem**: Recruiters were not receiving email notifications when interviews were scheduled.
+**Solution**: Updated the Google Calendar API scopes and parameters to ensure proper email notifications are sent.
+
+### Challenge 6: Database Schema Maintenance
+**Problem**: Database schema was being reset on each application restart, causing data loss.
+**Solution**: Modified the database initialization process to only create tables if they don't exist, preserving existing data.
 
 ## 👥 Team
 

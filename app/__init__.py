@@ -39,6 +39,8 @@ def create_app():
     
     # Create database tables
     with app.app_context():
+        # Create tables if they don't exist
         db.create_all()
+        print("Database tables created successfully")
     
     return app
