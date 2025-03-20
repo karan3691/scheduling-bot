@@ -309,13 +309,35 @@ class SchedulingService:
     
     def get_or_create_conversation_state(self, phone_number):
         """Get or create a conversation state for a phone number"""
+        # Normalize the phone number format (remove 'whatsapp:' and ensure it starts with '+')
+        normalized_number = phone_number.replace('whatsapp:', '')
+        if normalized_number and normalized_number[0].isdigit() and not normalized_number.startswith('+'):
+            normalized_number = '+' + normalized_number
+        
+        print(f"Looking for conversation state with normalized number: {normalized_number}")
+        
         # Check if conversation state exists - get the most recent one
-        state = ConversationState.query.filter_by(phone_number=phone_number).order_by(ConversationState.created_at.desc()).first()
+        state = ConversationState.query.filter_by(phone_number=normalized_number).order_by(
+            ConversationState.created_at.desc()).first()
+        
+        if not state:
+            # Also try a fuzzy search without the + in case there are entries with different formats
+            clean_number = normalized_number.replace('+', '')
+            state = ConversationState.query.filter(
+                ConversationState.phone_number.like(f"%{clean_number}")
+            ).order_by(ConversationState.created_at.desc()).first()
+            
+            if state:
+                # Update the phone number format to be consistent
+                state.phone_number = normalized_number
+                db.session.commit()
+                print(f"Updated phone number format from {state.phone_number} to {normalized_number}")
         
         if not state:
             # Create new conversation state
+            print(f"Creating new conversation state for {normalized_number}")
             state = ConversationState(
-                phone_number=phone_number,
+                phone_number=normalized_number,
                 current_state='initial',
                 context={}
             )
@@ -327,17 +349,22 @@ class SchedulingService:
     def update_conversation_state(self, phone_number, new_state, context=None):
         """Update the conversation state"""
         try:
+            # Normalize the phone number format to ensure consistent storage
+            normalized_number = phone_number.replace('whatsapp:', '')
+            if normalized_number and normalized_number[0].isdigit() and not normalized_number.startswith('+'):
+                normalized_number = '+' + normalized_number
+            
             # Import db at the beginning to avoid UnboundLocalError
             from app.models.database import db
             from app.models.models import ConversationState
             import json
             
             # Debug logging
-            print(f"Updating state for {phone_number} from state to {new_state}")
+            print(f"Updating state for {normalized_number} to {new_state}")
             print(f"New context: {context}")
             
             # First try to get the existing state - get the most recent one
-            state = ConversationState.query.filter_by(phone_number=phone_number).order_by(ConversationState.created_at.desc()).first()
+            state = ConversationState.query.filter_by(phone_number=normalized_number).order_by(ConversationState.created_at.desc()).first()
             
             if state:
                 # Update existing state
@@ -380,14 +407,14 @@ class SchedulingService:
                 db.session.refresh(state)
                 
                 # Verify the update by fetching again
-                updated_state = ConversationState.query.filter_by(phone_number=phone_number).order_by(ConversationState.created_at.desc()).first()
+                updated_state = ConversationState.query.filter_by(phone_number=normalized_number).order_by(ConversationState.created_at.desc()).first()
                 print(f"Verified state: {updated_state.current_state}")
                 print(f"Verified context: {updated_state.context}")
                 
                 return state
             else:
                 # Create new state
-                print(f"Creating new state for {phone_number}")
+                print(f"Creating new state for {normalized_number}")
                 
                 # Ensure context is a dictionary
                 if context is None:
@@ -402,7 +429,7 @@ class SchedulingService:
                 
                 # Create new conversation state
                 new_state_obj = ConversationState(
-                    phone_number=phone_number,
+                    phone_number=normalized_number,
                     current_state=new_state,
                     context=context_copy
                 )
@@ -414,7 +441,7 @@ class SchedulingService:
                 db.session.refresh(new_state_obj)
                 
                 # Verify the creation
-                created_state = ConversationState.query.filter_by(phone_number=phone_number).order_by(ConversationState.created_at.desc()).first()
+                created_state = ConversationState.query.filter_by(phone_number=normalized_number).order_by(ConversationState.created_at.desc()).first()
                 print(f"Created state: {created_state.current_state}")
                 print(f"Created context: {created_state.context}")
                 
@@ -436,7 +463,7 @@ class SchedulingService:
                     context = {}
                 
                 new_state_obj = ConversationState(
-                    phone_number=phone_number,
+                    phone_number=normalized_number,
                     current_state=new_state,
                     context=context
                 )
@@ -454,14 +481,30 @@ class SchedulingService:
     
     def reset_conversation(self, phone_number):
         """Reset the conversation state for a phone number"""
-        conversation = ConversationState.query.filter_by(phone_number=phone_number).first()
+        # Normalize the phone number format (remove 'whatsapp:' and ensure it starts with '+')
+        normalized_number = phone_number.replace('whatsapp:', '')
+        if normalized_number and normalized_number[0].isdigit() and not normalized_number.startswith('+'):
+            normalized_number = '+' + normalized_number
+        
+        print(f"Attempting to reset conversation for normalized number: {normalized_number}")
+        
+        # First try exact match
+        conversation = ConversationState.query.filter_by(phone_number=normalized_number).first()
+        
+        # If not found, try fuzzy match
+        if not conversation:
+            clean_number = normalized_number.replace('+', '')
+            conversation = ConversationState.query.filter(
+                ConversationState.phone_number.like(f"%{clean_number}")
+            ).first()
+        
         if conversation:
             db.session.delete(conversation)
             db.session.commit()
-            print(f"Conversation state for {phone_number} has been reset")
+            print(f"Conversation state for {normalized_number} has been reset")
             return True
         else:
-            print(f"No conversation state found for {phone_number}")
+            print(f"No conversation state found for {normalized_number}")
             return False
             
     def parse_availability(self, message_text):

@@ -167,8 +167,29 @@ class ConversationHandler:
     def handle_message(self, from_number, message_body):
         """Handle incoming WhatsApp messages"""
         try:
+            # Make sure we have valid input
+            if not from_number or not message_body:
+                print("Missing from_number or message_body")
+                return "Hello! I'm your interview scheduling assistant. Please send 'hi' or 'hello' to start."
+                
             # Clean the phone number (remove 'whatsapp:' prefix if present)
             phone_number = from_number.replace('whatsapp:', '')
+            
+            # Ensure phone number starts with + if it's a digit and doesn't have it
+            if phone_number and phone_number[0].isdigit() and not phone_number.startswith('+'):
+                phone_number = '+' + phone_number
+                
+            print(f"Cleaned phone number: {phone_number}")
+            
+            # Check for greeting keywords - prioritize this check
+            greeting_keywords = ['hi', 'hello', 'hey', 'hola', 'start', 'begin']
+            if message_body.lower().strip() in greeting_keywords:
+                print(f"Greeting detected, resetting conversation for {phone_number}")
+                # Reset any existing conversation
+                self.scheduling_service.reset_conversation(phone_number)
+                # Create a new conversation state at awaiting_name
+                self.scheduling_service.update_conversation_state(phone_number, 'awaiting_name', {})
+                return "Welcome to our interview scheduling assistant! 👋\n\nI'll help you schedule an interview with our recruitment team. To get started, please tell me your full name."
             
             # Check for reset command
             if message_body.lower().strip() in ['reset', 'restart', 'start over']:

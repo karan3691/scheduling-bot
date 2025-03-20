@@ -18,14 +18,22 @@ def webhook():
             from_number = data.get('from', '')
             body = data.get('message', '')
         else:
-            # Handle Twilio format
+            # Handle Twilio format (form-encoded)
             from_number = request.values.get('From', '')
             body = request.values.get('Body', '')
+            # Extended logging for Twilio format
+            print(f"Received Twilio message with params: {dict(request.values)}")
         
         print(f"Received message from {from_number}: '{body}'")
         
-        # Handle the message
-        response_text = conversation_handler.handle_message(from_number, body)
+        # Special handling for greeting messages to ensure they always work
+        if body and body.lower().strip() in ['hi', 'hello', 'hey', 'start']:
+            print("Greeting detected, ensuring conversation reset")
+            # Handle the greeting message directly
+            response_text = conversation_handler.handle_message(from_number, body)
+        else:
+            # Handle regular messages
+            response_text = conversation_handler.handle_message(from_number, body)
         
         # If it's a JSON request, return JSON response
         if request.is_json:
